@@ -35,6 +35,7 @@ public:
     [[nodiscard]] std::uint16_t display_width() const noexcept;
     [[nodiscard]] std::uint16_t display_height() const noexcept;
     [[nodiscard]] bool display_disabled() const noexcept;
+    [[nodiscard]] std::uint64_t frame_counter() const noexcept;
 
 private:
     struct Position {
@@ -114,6 +115,7 @@ private:
     bool force_mask_bit_ = false;
     bool preserve_masked_pixels_ = false;
     std::uint32_t frame_cycles_ = 0;
+    std::uint64_t frame_counter_ = 0;
 };
 
 }  // namespace psx

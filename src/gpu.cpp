@@ -125,6 +125,7 @@ bool Gpu::tick(const std::uint32_t cpu_cycles) noexcept {
     while (frame_cycles_ >= cpu_cycles_per_frame) {
         frame_cycles_ -= cpu_cycles_per_frame;
         status_ ^= 1U << 31;
+        ++frame_counter_;
         vblank = true;
     }
     return vblank;
@@ -174,6 +175,10 @@ bool Gpu::display_disabled() const noexcept {
     return (status_ & display_disable) != 0;
 }
 
+std::uint64_t Gpu::frame_counter() const noexcept {
+    return frame_counter_;
+}
+
 void Gpu::reset() {
     reset_command_buffer();
     transfer_mode_ = TransferMode::command;
@@ -196,6 +201,7 @@ void Gpu::reset() {
     force_mask_bit_ = false;
     preserve_masked_pixels_ = false;
     frame_cycles_ = 0;
+    frame_counter_ = 0;
 }
 
 void Gpu::reset_command_buffer() noexcept {

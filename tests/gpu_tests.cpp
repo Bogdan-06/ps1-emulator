@@ -28,6 +28,7 @@ void run_gpu_tests() {
     expect(
         gpu.read_status() >> 31 != initial_field,
         "GPU field status should toggle at the frame boundary");
+    expect(gpu.frame_counter() == 1, "GPU should count completed frames");
 
     gpu.write_gp0(0x0200'00ff);
     gpu.write_gp0(position(16, 20));

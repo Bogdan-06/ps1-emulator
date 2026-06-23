@@ -65,6 +65,7 @@ int main(const int argc, const char* const argv[]) {
                   << "Trace: " << (parsed.config.trace ? "enabled" : "disabled") << '\n';
 
         std::uint64_t executed = 0;
+        std::uint64_t presented_frame = cpu.bus().gpu().frame_counter();
         bool running = true;
         while (running
             && (parsed.config.instruction_limit == 0
@@ -76,8 +77,12 @@ int main(const int argc, const char* const argv[]) {
                           << std::setw(8) << result.pc << "  "
                           << std::setw(8) << result.instruction << '\n';
             }
-            if (display != nullptr && executed % 50'000 == 0) {
-                running = display->present(cpu.bus().gpu());
+            if (display != nullptr) {
+                const auto current_frame = cpu.bus().gpu().frame_counter();
+                if (current_frame != presented_frame) {
+                    running = display->present(cpu.bus().gpu());
+                    presented_frame = current_frame;
+                }
             }
         }
 
