@@ -35,14 +35,31 @@ public:
     [[nodiscard]] Gpu& gpu() noexcept;
 
 private:
+    struct DmaChannel {
+        std::uint32_t base = 0;
+        std::uint32_t block = 0;
+        std::uint32_t control = 0;
+    };
+
     [[nodiscard]] static std::uint32_t physical_address(std::uint32_t address) noexcept;
     static void require_alignment(std::uint32_t address, std::uint32_t alignment);
+    [[nodiscard]] std::uint32_t load_dma(std::uint32_t address) const;
+    void store_dma(std::uint32_t address, std::uint32_t value);
+    void execute_dma(std::size_t channel);
+    void execute_gpu_dma(DmaChannel& channel);
+    void execute_otc_dma(DmaChannel& channel);
+    void complete_dma(std::size_t channel);
+    [[nodiscard]] std::uint32_t read_ram_word(std::uint32_t address) const;
+    void write_ram_word(std::uint32_t address, std::uint32_t value);
 
     Bios bios_;
     std::array<std::uint8_t, ram_size> ram_{};
     std::array<std::uint8_t, scratchpad_size> scratchpad_{};
     std::array<std::uint8_t, io_size> io_{};
     mutable Gpu gpu_;
+    std::array<DmaChannel, 7> dma_channels_{};
+    std::uint32_t dma_control_ = 0x0765'4321;
+    std::uint32_t dma_interrupt_ = 0;
     std::uint32_t cache_control_ = 0;
 };
 

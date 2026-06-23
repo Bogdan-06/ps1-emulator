@@ -44,6 +44,27 @@ void run_bus_tests() {
     bus.store32(0x1f00'0084, 0x1234'5678);
     expect(bus.load32(0x1f00'0084) == 0xffff'ffff, "absent expansion should ignore writes");
 
+    bus.store32(0x1f80'10e0, 0x0000'010c);
+    bus.store32(0x1f80'10e4, 4);
+    bus.store32(0x1f80'10e8, 0x1100'0002);
+    expect(bus.load32(0x0000'010c) == 0x0000'0108, "OTC should link to the previous word");
+    expect(bus.load32(0x0000'0108) == 0x0000'0104, "OTC should build a descending list");
+    expect(bus.load32(0x0000'0100) == 0x00ff'ffff, "OTC should terminate the list");
+    expect(
+        (bus.load32(0x1f80'10e8) & (1U << 24)) == 0,
+        "OTC completion should clear the DMA start bit");
+
+    bus.store32(0x0000'0200, 0x0200'00ff);
+    bus.store32(0x0000'0204, 0x003c'0030);
+    bus.store32(0x0000'0208, 0x0001'0001);
+    bus.store32(0x1f80'10a0, 0x0000'0200);
+    bus.store32(0x1f80'10a4, 3);
+    bus.store32(0x1f80'10a8, 0x1100'0001);
+    expect(bus.gpu().pixel(48, 60) == 0x001f, "GPU DMA should deliver GP0 command words");
+    expect(
+        (bus.load32(0x1f80'10a8) & (1U << 24)) == 0,
+        "GPU DMA completion should clear the start bit");
+
     bool rejected_unaligned = false;
     try {
         static_cast<void>(bus.load32(0x0000'0002));

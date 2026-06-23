@@ -14,6 +14,8 @@ constexpr std::uint32_t expansion1_start = 0x1f00'0000;
 constexpr std::uint32_t expansion1_size = 8 * 1024 * 1024;
 constexpr std::uint32_t scratchpad_start = 0x1f80'0000;
 constexpr std::uint32_t io_start = 0x1f80'1000;
+constexpr std::uint32_t dma_start = 0x1f80'1080;
+constexpr std::uint32_t dma_end = 0x1f80'10f8;
 constexpr std::uint32_t gpu_data_address = 0x1f80'1810;
 constexpr std::uint32_t gpu_status_address = 0x1f80'1814;
 constexpr std::uint32_t bios_start = 0x1fc0'0000;
@@ -135,6 +137,9 @@ std::uint32_t Bus::load32(const std::uint32_t address) const {
     if (physical == gpu_status_address) {
         return gpu_.read_status();
     }
+    if (physical >= dma_start && physical < dma_end) {
+        return load_dma(physical);
+    }
     if (physical >= io_start && physical < io_start + io_size - 3) {
         return read32(io_, physical - io_start);
     }
@@ -233,6 +238,10 @@ void Bus::store32(const std::uint32_t address, const std::uint32_t value) {
         gpu_.write_gp1(value);
         return;
     }
+    if (physical >= dma_start && physical < dma_end) {
+        store_dma(physical, value);
+        return;
+    }
     if (physical >= io_start && physical < io_start + io_size - 3) {
         write32(io_, physical - io_start, value);
         return;
@@ -251,6 +260,184 @@ const Gpu& Bus::gpu() const noexcept {
 
 Gpu& Bus::gpu() noexcept {
     return gpu_;
+}
+
+std::uint32_t Bus::load_dma(const std::uint32_t address) const {
+    if (address == 0x1f80'10f0) {
+        return dma_control_;
+    }
+    if (address == 0x1f80'10f4) {
+        return dma_interrupt_;
+    }
+
+    const auto channel_index = static_cast<std::size_t>((address - dma_start) >> 4);
+    if (channel_index >= dma_channels_.size()) {
+        return 0;
+    }
+
+    const auto register_index = (address >> 2) & 3U;
+    const auto& channel = dma_channels_[channel_index];
+    switch (register_index) {
+    case 0:
+        return channel.base;
+    case 1:
+        return channel.block;
+    case 2:
+        return channel.control;
+    default:
+        return 0;
+    }
+}
+
+void Bus::store_dma(const std::uint32_t address, const std::uint32_t value) {
+    if (address == 0x1f80'10f0) {
+        dma_control_ = value;
+        return;
+    }
+    if (address == 0x1f80'10f4) {
+        const auto acknowledge = (value >> 24) & 0x7fU;
+        dma_interrupt_ &= ~(acknowledge << 24);
+        dma_interrupt_ = (dma_interrupt_ & 0xff00'0000U) | (value & 0x00ff'803fU);
+        const bool force_irq = (dma_interrupt_ & (1U << 15)) != 0;
+        const bool master_enabled = (dma_interrupt_ & (1U << 23)) != 0;
+        const auto enabled = (dma_interrupt_ >> 16) & 0x7fU;
+        const auto flags = (dma_interrupt_ >> 24) & 0x7fU;
+        if (force_irq || (master_enabled && (enabled & flags) != 0)) {
+            dma_interrupt_ |= 1U << 31;
+        } else {
+            dma_interrupt_ &= ~(1U << 31);
+        }
+        return;
+    }
+
+    const auto channel_index = static_cast<std::size_t>((address - dma_start) >> 4);
+    if (channel_index >= dma_channels_.size()) {
+        return;
+    }
+
+    auto& channel = dma_channels_[channel_index];
+    switch ((address >> 2) & 3U) {
+    case 0:
+        channel.base = value & 0x00ff'ffffU;
+        return;
+    case 1:
+        channel.block = value;
+        return;
+    case 2:
+        channel.control = value & 0x7177'0703U;
+        execute_dma(channel_index);
+        return;
+    default:
+        return;
+    }
+}
+
+void Bus::execute_dma(const std::size_t channel_index) {
+    auto& channel = dma_channels_[channel_index];
+    const auto synchronization = (channel.control >> 9) & 3U;
+    const bool started = (channel.control & (1U << 24)) != 0;
+    const bool triggered = (channel.control & (1U << 28)) != 0;
+    if (!started || (synchronization == 0 && !triggered)) {
+        return;
+    }
+
+    switch (channel_index) {
+    case 2:
+        execute_gpu_dma(channel);
+        break;
+    case 6:
+        execute_otc_dma(channel);
+        break;
+    default:
+        break;
+    }
+
+    channel.control &= ~((1U << 24) | (1U << 28));
+    complete_dma(channel_index);
+}
+
+void Bus::execute_gpu_dma(DmaChannel& channel) {
+    const bool from_ram = (channel.control & 1U) != 0;
+    const bool decrement = (channel.control & 2U) != 0;
+    const auto synchronization = (channel.control >> 9) & 3U;
+    auto address = channel.base & 0x001f'fffcU;
+
+    if (synchronization == 2) {
+        if (!from_ram) {
+            return;
+        }
+
+        std::size_t nodes = 0;
+        while (nodes++ < 1'000'000) {
+            const auto header = read_ram_word(address);
+            const auto word_count = header >> 24;
+            for (std::uint32_t word = 0; word < word_count; ++word) {
+                address = (address + 4) & 0x001f'fffcU;
+                gpu_.write_gp0(read_ram_word(address));
+            }
+
+            if ((header & 0x00ff'ffffU) == 0x00ff'ffffU) {
+                break;
+            }
+            address = header & 0x001f'fffcU;
+        }
+        channel.base = address;
+        return;
+    }
+
+    std::uint32_t word_count = channel.block & 0xffffU;
+    if (synchronization == 1) {
+        auto block_count = channel.block >> 16;
+        block_count = block_count == 0 ? 0x1'0000U : block_count;
+        const auto block_size = word_count == 0 ? 0x1'0000U : word_count;
+        word_count = block_size * block_count;
+    } else if (word_count == 0) {
+        word_count = 0x1'0000U;
+    }
+
+    const auto step = decrement ? static_cast<std::uint32_t>(-4) : 4U;
+    for (std::uint32_t word = 0; word < word_count; ++word) {
+        if (from_ram) {
+            gpu_.write_gp0(read_ram_word(address));
+        } else {
+            write_ram_word(address, gpu_.read_data());
+        }
+        address = (address + step) & 0x001f'fffcU;
+    }
+    channel.base = address;
+}
+
+void Bus::execute_otc_dma(DmaChannel& channel) {
+    auto address = channel.base & 0x001f'fffcU;
+    auto word_count = channel.block & 0xffffU;
+    word_count = word_count == 0 ? 0x1'0000U : word_count;
+
+    for (std::uint32_t word = 0; word < word_count; ++word) {
+        const auto value = word + 1 == word_count
+            ? 0x00ff'ffffU
+            : (address - 4) & 0x001f'ffffU;
+        write_ram_word(address, value);
+        address = (address - 4) & 0x001f'fffcU;
+    }
+    channel.base = address;
+}
+
+void Bus::complete_dma(const std::size_t channel) {
+    dma_interrupt_ |= 1U << (24 + channel);
+    const bool master_enabled = (dma_interrupt_ & (1U << 23)) != 0;
+    const auto enabled = (dma_interrupt_ >> 16) & 0x7fU;
+    const auto flags = (dma_interrupt_ >> 24) & 0x7fU;
+    if (master_enabled && (enabled & flags) != 0) {
+        dma_interrupt_ |= 1U << 31;
+    }
+}
+
+std::uint32_t Bus::read_ram_word(const std::uint32_t address) const {
+    return read32(ram_, address & (ram_size - 1));
+}
+
+void Bus::write_ram_word(const std::uint32_t address, const std::uint32_t value) {
+    write32(ram_, address & (ram_size - 1), value);
 }
 
 std::uint32_t Bus::physical_address(const std::uint32_t address) noexcept {
