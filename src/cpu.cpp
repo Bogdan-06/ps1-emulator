@@ -82,8 +82,8 @@ Cpu::Cpu(Bus bus)
 StepResult Cpu::step() {
     const auto instruction_pc = pc_;
     const auto instruction = bus_.load32(instruction_pc);
-    const auto load_to_commit = pending_load_;
 
+    load_in_delay_slot_ = pending_load_;
     pending_load_.reset();
     written_register_.reset();
     pc_ = next_pc_;
@@ -91,11 +91,12 @@ StepResult Cpu::step() {
 
     execute(instruction, instruction_pc);
 
-    if (load_to_commit.has_value()
-        && load_to_commit->target != 0
-        && written_register_ != load_to_commit->target) {
-        registers_[load_to_commit->target] = load_to_commit->value;
+    if (load_in_delay_slot_.has_value()
+        && load_in_delay_slot_->target != 0
+        && written_register_ != load_in_delay_slot_->target) {
+        registers_[load_in_delay_slot_->target] = load_in_delay_slot_->value;
     }
+    load_in_delay_slot_.reset();
     registers_[0] = 0;
 
     return StepResult{instruction_pc, instruction};
@@ -213,6 +214,32 @@ void Cpu::execute(const std::uint32_t instruction, const std::uint32_t instructi
             rt(instruction),
             sign_extend(bus_.load16(effective_address(instruction))));
         return;
+    case 0x22: {
+        const auto address = effective_address(instruction);
+        const auto word = bus_.load32(address & ~3U);
+        const auto current = load_merge_register(rt(instruction));
+        std::uint32_t value = 0;
+
+        switch (address & 3U) {
+        case 0:
+            value = (current & 0x00ff'ffffU) | (word << 24);
+            break;
+        case 1:
+            value = (current & 0x0000'ffffU) | (word << 16);
+            break;
+        case 2:
+            value = (current & 0x0000'00ffU) | (word << 8);
+            break;
+        case 3:
+            value = word;
+            break;
+        default:
+            break;
+        }
+
+        schedule_load(rt(instruction), value);
+        return;
+    }
     case 0x23:
         schedule_load(rt(instruction), bus_.load32(effective_address(instruction)));
         return;
@@ -222,6 +249,32 @@ void Cpu::execute(const std::uint32_t instruction, const std::uint32_t instructi
     case 0x25:
         schedule_load(rt(instruction), bus_.load16(effective_address(instruction)));
         return;
+    case 0x26: {
+        const auto address = effective_address(instruction);
+        const auto word = bus_.load32(address & ~3U);
+        const auto current = load_merge_register(rt(instruction));
+        std::uint32_t value = 0;
+
+        switch (address & 3U) {
+        case 0:
+            value = word;
+            break;
+        case 1:
+            value = (current & 0xff00'0000U) | (word >> 8);
+            break;
+        case 2:
+            value = (current & 0xffff'0000U) | (word >> 16);
+            break;
+        case 3:
+            value = (current & 0xffff'ff00U) | (word >> 24);
+            break;
+        default:
+            break;
+        }
+
+        schedule_load(rt(instruction), value);
+        return;
+    }
     case 0x28:
         if (!cache_isolated()) {
             bus_.store8(effective_address(instruction), static_cast<std::uint8_t>(target));
@@ -232,9 +285,63 @@ void Cpu::execute(const std::uint32_t instruction, const std::uint32_t instructi
             bus_.store16(effective_address(instruction), static_cast<std::uint16_t>(target));
         }
         return;
+    case 0x2a:
+        if (!cache_isolated()) {
+            const auto address = effective_address(instruction);
+            const auto aligned = address & ~3U;
+            const auto current = bus_.load32(aligned);
+            std::uint32_t value = 0;
+
+            switch (address & 3U) {
+            case 0:
+                value = (current & 0xffff'ff00U) | (target >> 24);
+                break;
+            case 1:
+                value = (current & 0xffff'0000U) | (target >> 16);
+                break;
+            case 2:
+                value = (current & 0xff00'0000U) | (target >> 8);
+                break;
+            case 3:
+                value = target;
+                break;
+            default:
+                break;
+            }
+
+            bus_.store32(aligned, value);
+        }
+        return;
     case 0x2b:
         if (!cache_isolated()) {
             bus_.store32(effective_address(instruction), target);
+        }
+        return;
+    case 0x2e:
+        if (!cache_isolated()) {
+            const auto address = effective_address(instruction);
+            const auto aligned = address & ~3U;
+            const auto current = bus_.load32(aligned);
+            std::uint32_t value = 0;
+
+            switch (address & 3U) {
+            case 0:
+                value = target;
+                break;
+            case 1:
+                value = (current & 0x0000'00ffU) | (target << 8);
+                break;
+            case 2:
+                value = (current & 0x0000'ffffU) | (target << 16);
+                break;
+            case 3:
+                value = (current & 0x00ff'ffffU) | (target << 24);
+                break;
+            default:
+                break;
+            }
+
+            bus_.store32(aligned, value);
         }
         return;
     default:
@@ -446,6 +553,13 @@ void Cpu::schedule_load(const std::uint32_t index, const std::uint32_t value) no
 
 std::uint32_t Cpu::load_register(const std::uint32_t index) const noexcept {
     return registers_[index];
+}
+
+std::uint32_t Cpu::load_merge_register(const std::uint32_t index) const noexcept {
+    if (load_in_delay_slot_.has_value() && load_in_delay_slot_->target == index) {
+        return load_in_delay_slot_->value;
+    }
+    return load_register(index);
 }
 
 std::uint32_t Cpu::effective_address(const std::uint32_t instruction) const noexcept {

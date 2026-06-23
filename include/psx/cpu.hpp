@@ -49,6 +49,7 @@ private:
     void set_register(std::uint32_t index, std::uint32_t value) noexcept;
     void schedule_load(std::uint32_t index, std::uint32_t value) noexcept;
     [[nodiscard]] std::uint32_t load_register(std::uint32_t index) const noexcept;
+    [[nodiscard]] std::uint32_t load_merge_register(std::uint32_t index) const noexcept;
     [[nodiscard]] std::uint32_t effective_address(std::uint32_t instruction) const noexcept;
     [[nodiscard]] bool cache_isolated() const noexcept;
 
@@ -66,6 +67,7 @@ private:
     std::uint32_t pc_ = reset_vector;
     std::uint32_t next_pc_ = reset_vector + 4;
     std::optional<PendingLoad> pending_load_;
+    std::optional<PendingLoad> load_in_delay_slot_;
     std::optional<std::uint32_t> written_register_;
 };
 

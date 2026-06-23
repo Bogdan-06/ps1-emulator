@@ -133,4 +133,35 @@ void run_cpu_tests() {
         static_cast<void>(cpu.step());
         expect(cpu.bus().load32(0x100) == 0x55, "RAM stores should resume after cache isolation");
     }
+
+    {
+        std::vector<std::uint8_t> bios(psx::Bios::size);
+
+        write_instruction(bios, 0, encode_i(0x09, 0, 8, 0x101));   // addiu t0, zero, 0x101
+        write_instruction(bios, 1, encode_i(0x0f, 0, 9, 0xaabb));   // lui t1, 0xaabb
+        write_instruction(bios, 2, encode_i(0x0d, 9, 9, 0xccdd));   // ori t1, t1, 0xccdd
+        write_instruction(bios, 3, encode_i(0x22, 8, 9, 3));        // lwl t1, 3(t0)
+        write_instruction(bios, 4, encode_i(0x26, 8, 9, 0));        // lwr t1, 0(t0)
+        write_instruction(bios, 5, 0);                              // load delay slot
+        write_instruction(bios, 6, encode_i(0x2a, 8, 9, 7));        // swl t1, 7(t0)
+        write_instruction(bios, 7, encode_i(0x2e, 8, 9, 4));        // swr t1, 4(t0)
+
+        psx::Cpu cpu{psx::Bus{psx::Bios{std::move(bios)}}};
+        cpu.bus().store8(0x101, 0x11);
+        cpu.bus().store8(0x102, 0x22);
+        cpu.bus().store8(0x103, 0x33);
+        cpu.bus().store8(0x104, 0x44);
+
+        for (int step = 0; step < 8; ++step) {
+            static_cast<void>(cpu.step());
+        }
+
+        expect(
+            cpu.register_value(9) == 0x4433'2211,
+            "consecutive LWL/LWR should merge through the load delay");
+        expect(cpu.bus().load8(0x105) == 0x11, "SWR should store the low byte");
+        expect(cpu.bus().load8(0x106) == 0x22, "SWR should store the second byte");
+        expect(cpu.bus().load8(0x107) == 0x33, "SWR should store the third byte");
+        expect(cpu.bus().load8(0x108) == 0x44, "SWL should store the high byte");
+    }
 }
