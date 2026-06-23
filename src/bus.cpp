@@ -10,6 +10,8 @@ namespace psx {
 namespace {
 
 constexpr std::uint32_t ram_mirror_end = 0x0080'0000;
+constexpr std::uint32_t expansion1_start = 0x1f00'0000;
+constexpr std::uint32_t expansion1_size = 8 * 1024 * 1024;
 constexpr std::uint32_t scratchpad_start = 0x1f80'0000;
 constexpr std::uint32_t io_start = 0x1f80'1000;
 constexpr std::uint32_t bios_start = 0x1fc0'0000;
@@ -60,6 +62,10 @@ std::uint8_t Bus::load8(const std::uint32_t address) const {
     if (physical < ram_mirror_end) {
         return ram_[physical % ram_size];
     }
+    if (physical >= expansion1_start
+        && physical < expansion1_start + expansion1_size) {
+        return 0xff;
+    }
     if (physical >= scratchpad_start && physical < scratchpad_start + scratchpad_size) {
         return scratchpad_[physical - scratchpad_start];
     }
@@ -83,6 +89,10 @@ std::uint16_t Bus::load16(const std::uint32_t address) const {
 
     if (physical < ram_mirror_end - 1) {
         return read16(ram_, physical % ram_size);
+    }
+    if (physical >= expansion1_start
+        && physical < expansion1_start + expansion1_size - 1) {
+        return 0xffff;
     }
     if (physical >= scratchpad_start
         && physical < scratchpad_start + scratchpad_size - 1) {
@@ -109,6 +119,10 @@ std::uint32_t Bus::load32(const std::uint32_t address) const {
     if (physical < ram_mirror_end - 3) {
         return read32(ram_, physical % ram_size);
     }
+    if (physical >= expansion1_start
+        && physical < expansion1_start + expansion1_size - 3) {
+        return 0xffff'ffff;
+    }
     if (physical >= scratchpad_start
         && physical < scratchpad_start + scratchpad_size - 3) {
         return read32(scratchpad_, physical - scratchpad_start);
@@ -131,6 +145,10 @@ void Bus::store8(const std::uint32_t address, const std::uint8_t value) {
 
     if (physical < ram_mirror_end) {
         ram_[physical % ram_size] = value;
+        return;
+    }
+    if (physical >= expansion1_start
+        && physical < expansion1_start + expansion1_size) {
         return;
     }
     if (physical >= scratchpad_start && physical < scratchpad_start + scratchpad_size) {
@@ -159,6 +177,10 @@ void Bus::store16(const std::uint32_t address, const std::uint16_t value) {
         write16(ram_, physical % ram_size, value);
         return;
     }
+    if (physical >= expansion1_start
+        && physical < expansion1_start + expansion1_size - 1) {
+        return;
+    }
     if (physical >= scratchpad_start
         && physical < scratchpad_start + scratchpad_size - 1) {
         write16(scratchpad_, physical - scratchpad_start, value);
@@ -184,6 +206,10 @@ void Bus::store32(const std::uint32_t address, const std::uint32_t value) {
 
     if (physical < ram_mirror_end - 3) {
         write32(ram_, physical % ram_size, value);
+        return;
+    }
+    if (physical >= expansion1_start
+        && physical < expansion1_start + expansion1_size - 3) {
         return;
     }
     if (physical >= scratchpad_start

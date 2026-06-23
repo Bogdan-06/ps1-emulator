@@ -31,6 +31,12 @@ void run_bus_tests() {
     bus.store32(0xfffe'0130, 0x0000'0804);
     expect(bus.load32(0xfffe'0130) == 0x0000'0804, "cache control should retain values");
 
+    expect(bus.load8(0x1f00'0084) == 0xff, "absent expansion should return an open byte bus");
+    expect(bus.load16(0x1f00'0084) == 0xffff, "absent expansion should return an open halfword bus");
+    expect(bus.load32(0x1f00'0084) == 0xffff'ffff, "absent expansion should return an open word bus");
+    bus.store32(0x1f00'0084, 0x1234'5678);
+    expect(bus.load32(0x1f00'0084) == 0xffff'ffff, "absent expansion should ignore writes");
+
     bool rejected_unaligned = false;
     try {
         static_cast<void>(bus.load32(0x0000'0002));
