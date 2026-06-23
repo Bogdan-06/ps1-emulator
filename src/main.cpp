@@ -3,12 +3,14 @@
 #include "psx/cli.hpp"
 #include "psx/cpu.hpp"
 #include "psx/display.hpp"
+#include "psx/disc.hpp"
 
 #include <cstdint>
 #include <exception>
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -35,7 +37,12 @@ int main(const int argc, const char* const argv[]) {
     }
 
     try {
-        psx::Cpu cpu{psx::Bus{psx::Bios::load(parsed.config.bios_path)}};
+        std::optional<psx::Disc> disc;
+        if (!parsed.config.disc_path.empty()) {
+            disc.emplace(psx::Disc::open(parsed.config.disc_path));
+        }
+        psx::Cpu cpu{
+            psx::Bus{psx::Bios::load(parsed.config.bios_path), std::move(disc)}};
         std::unique_ptr<psx::Display> display;
         if (parsed.config.display) {
             display = std::make_unique<psx::Display>();
@@ -43,6 +50,11 @@ int main(const int argc, const char* const argv[]) {
 
         std::cout << "PS1 emulator core initialized\n"
                   << "BIOS: " << parsed.config.bios_path << '\n'
+                  << "Disc: "
+                  << (parsed.config.disc_path.empty()
+                        ? std::string{"none"}
+                        : parsed.config.disc_path.string())
+                  << '\n'
                   << "Instruction limit: ";
         if (parsed.config.instruction_limit == 0) {
             std::cout << "unlimited\n";

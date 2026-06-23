@@ -52,6 +52,15 @@ ParseResult parse_arguments(const std::span<const std::string_view> arguments) {
             continue;
         }
 
+        if (argument == "--disc") {
+            if (++index >= arguments.size()) {
+                result.error = "--disc requires a CUE or BIN file path";
+                return result;
+            }
+            result.config.disc_path = arguments[index];
+            continue;
+        }
+
         if (argument == "--steps") {
             steps_provided = true;
             if (++index >= arguments.size()) {
@@ -82,10 +91,11 @@ ParseResult parse_arguments(const std::span<const std::string_view> arguments) {
 
 std::string usage(const std::string_view program_name) {
     return "Usage: " + std::string{program_name}
-        + " --bios <file> [--steps <count>] [--trace] [--display]\n"
+        + " --bios <file> [--disc <file>] [--steps <count>] [--trace] [--display]\n"
           "\n"
           "Options:\n"
           "  --bios <file>    Path to a 512 KiB PlayStation BIOS dump\n"
+          "  --disc <file>    Path to a MODE2/2352 CUE or BIN disc image\n"
           "  --steps <count>  Stop after this many instructions; 0 runs continuously\n"
           "  --trace          Print each executed instruction\n"
           "  --display        Open a window; runs continuously unless --steps is set\n"

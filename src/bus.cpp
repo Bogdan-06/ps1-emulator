@@ -20,6 +20,8 @@ constexpr std::uint32_t dma_start = 0x1f80'1080;
 constexpr std::uint32_t dma_end = 0x1f80'10f8;
 constexpr std::uint32_t gpu_data_address = 0x1f80'1810;
 constexpr std::uint32_t gpu_status_address = 0x1f80'1814;
+constexpr std::uint32_t cdrom_start = 0x1f80'1800;
+constexpr std::uint32_t cdrom_end = 0x1f80'1804;
 constexpr std::uint32_t bios_start = 0x1fc0'0000;
 constexpr std::uint32_t cache_control_address = 0xfffe'0130;
 
@@ -59,8 +61,9 @@ void write32(Container& data, const std::size_t offset, const std::uint32_t valu
 
 }  // namespace
 
-Bus::Bus(Bios bios)
-    : bios_(std::move(bios)) {}
+Bus::Bus(Bios bios, std::optional<Disc> disc)
+    : bios_(std::move(bios)),
+      cdrom_(std::move(disc)) {}
 
 std::uint8_t Bus::load8(const std::uint32_t address) const {
     const auto physical = physical_address(address);
@@ -74,6 +77,9 @@ std::uint8_t Bus::load8(const std::uint32_t address) const {
     }
     if (physical >= scratchpad_start && physical < scratchpad_start + scratchpad_size) {
         return scratchpad_[physical - scratchpad_start];
+    }
+    if (physical >= cdrom_start && physical < cdrom_end) {
+        return cdrom_.read(physical);
     }
     if (physical >= io_start && physical < io_start + io_size) {
         return io_[physical - io_start];
@@ -182,6 +188,10 @@ void Bus::store8(const std::uint32_t address, const std::uint8_t value) {
         scratchpad_[physical - scratchpad_start] = value;
         return;
     }
+    if (physical >= cdrom_start && physical < cdrom_end) {
+        cdrom_.write(physical, value);
+        return;
+    }
     if (physical >= io_start && physical < io_start + io_size) {
         io_[physical - io_start] = value;
         return;
@@ -288,6 +298,9 @@ void Bus::tick(const std::uint32_t cpu_cycles) {
     if (gpu_.tick(cpu_cycles)) {
         interrupt_status_ |= 1U << 0;
     }
+    if (cdrom_.interrupt_requested()) {
+        interrupt_status_ |= 1U << 2;
+    }
 }
 
 const Gpu& Bus::gpu() const noexcept {
@@ -385,6 +398,22 @@ void Bus::execute_dma(const std::size_t channel_index) {
     case 2:
         execute_gpu_dma(channel);
         break;
+    case 3: {
+        auto words = channel.block & 0xffffU;
+        if (synchronization == 1) {
+            const auto blocks = std::max(1U, channel.block >> 16);
+            words = std::max(1U, words) * blocks;
+        } else {
+            words = std::max(1U, words);
+        }
+        auto address = channel.base & 0x001f'fffcU;
+        for (std::uint32_t word = 0; word < words; ++word) {
+            write_ram_word(address, cdrom_.read_dma_word());
+            address = (address + 4) & 0x001f'fffcU;
+        }
+        channel.base = address;
+        break;
+    }
     case 6:
         execute_otc_dma(channel);
         break;

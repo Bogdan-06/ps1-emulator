@@ -1,11 +1,14 @@
 #pragma once
 
 #include "psx/bios.hpp"
+#include "psx/cdrom.hpp"
+#include "psx/disc.hpp"
 #include "psx/gpu.hpp"
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 
 namespace psx {
@@ -21,7 +24,7 @@ public:
     static constexpr std::size_t scratchpad_size = 1024;
     static constexpr std::size_t io_size = 8 * 1024;
 
-    explicit Bus(Bios bios);
+    explicit Bus(Bios bios, std::optional<Disc> disc = std::nullopt);
 
     [[nodiscard]] std::uint8_t load8(std::uint32_t address) const;
     [[nodiscard]] std::uint16_t load16(std::uint32_t address) const;
@@ -59,6 +62,7 @@ private:
     std::array<std::uint8_t, scratchpad_size> scratchpad_{};
     std::array<std::uint8_t, io_size> io_{};
     mutable Gpu gpu_;
+    mutable Cdrom cdrom_;
     std::array<DmaChannel, 7> dma_channels_{};
     std::uint32_t dma_control_ = 0x0765'4321;
     std::uint32_t dma_interrupt_ = 0;

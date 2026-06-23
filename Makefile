@@ -9,9 +9,9 @@ BUILD_DIR := build
 APP := $(BUILD_DIR)/ps1-emulator
 TEST_APP := $(BUILD_DIR)/ps1-emulator-tests
 
-CORE_SOURCES := src/bios.cpp src/bus.cpp src/cli.cpp src/cpu.cpp src/disc.cpp src/display.cpp src/gpu.cpp
+CORE_SOURCES := src/bios.cpp src/bus.cpp src/cdrom.cpp src/cli.cpp src/cpu.cpp src/disc.cpp src/display.cpp src/gpu.cpp
 APP_SOURCES := src/main.cpp $(CORE_SOURCES)
-TEST_SOURCES := tests/test_main.cpp tests/cli_tests.cpp tests/bus_tests.cpp tests/cpu_tests.cpp tests/disc_tests.cpp tests/display_tests.cpp tests/gpu_tests.cpp $(CORE_SOURCES)
+TEST_SOURCES := tests/test_main.cpp tests/cdrom_tests.cpp tests/cli_tests.cpp tests/bus_tests.cpp tests/cpu_tests.cpp tests/disc_tests.cpp tests/display_tests.cpp tests/gpu_tests.cpp $(CORE_SOURCES)
 
 APP_OBJECTS := $(APP_SOURCES:%.cpp=$(BUILD_DIR)/%.o)
 TEST_OBJECTS := $(TEST_SOURCES:%.cpp=$(BUILD_DIR)/%.o)

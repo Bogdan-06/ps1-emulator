@@ -35,7 +35,8 @@ Add `--trace` to print the PC and machine word for every instruction. Use
 To open the experimental GPU display and run until the window closes:
 
 ```sh
-./build/ps1-emulator --bios path/to/scph1001.bin --display
+./build/ps1-emulator --bios path/to/scph1001.bin \
+  --disc path/to/game.cue --display
 ```
 
 The display backend loads the SDL2 runtime dynamically. On Linux, install the

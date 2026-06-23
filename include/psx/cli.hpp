@@ -10,6 +10,7 @@ namespace psx {
 
 struct AppConfig {
     std::filesystem::path bios_path;
+    std::filesystem::path disc_path;
     std::uint64_t instruction_limit = 1'000'000;
     bool trace = false;
     bool display = false;
