@@ -1,6 +1,7 @@
 #pragma once
 
 #include "psx/bios.hpp"
+#include "psx/gpu.hpp"
 
 #include <array>
 #include <cstddef>
@@ -30,6 +31,9 @@ public:
     void store16(std::uint32_t address, std::uint16_t value);
     void store32(std::uint32_t address, std::uint32_t value);
 
+    [[nodiscard]] const Gpu& gpu() const noexcept;
+    [[nodiscard]] Gpu& gpu() noexcept;
+
 private:
     [[nodiscard]] static std::uint32_t physical_address(std::uint32_t address) noexcept;
     static void require_alignment(std::uint32_t address, std::uint32_t alignment);
@@ -38,6 +42,7 @@ private:
     std::array<std::uint8_t, ram_size> ram_{};
     std::array<std::uint8_t, scratchpad_size> scratchpad_{};
     std::array<std::uint8_t, io_size> io_{};
+    mutable Gpu gpu_;
     std::uint32_t cache_control_ = 0;
 };
 

@@ -14,6 +14,8 @@ constexpr std::uint32_t expansion1_start = 0x1f00'0000;
 constexpr std::uint32_t expansion1_size = 8 * 1024 * 1024;
 constexpr std::uint32_t scratchpad_start = 0x1f80'0000;
 constexpr std::uint32_t io_start = 0x1f80'1000;
+constexpr std::uint32_t gpu_data_address = 0x1f80'1810;
+constexpr std::uint32_t gpu_status_address = 0x1f80'1814;
 constexpr std::uint32_t bios_start = 0x1fc0'0000;
 constexpr std::uint32_t cache_control_address = 0xfffe'0130;
 
@@ -127,6 +129,12 @@ std::uint32_t Bus::load32(const std::uint32_t address) const {
         && physical < scratchpad_start + scratchpad_size - 3) {
         return read32(scratchpad_, physical - scratchpad_start);
     }
+    if (physical == gpu_data_address) {
+        return gpu_.read_data();
+    }
+    if (physical == gpu_status_address) {
+        return gpu_.read_status();
+    }
     if (physical >= io_start && physical < io_start + io_size - 3) {
         return read32(io_, physical - io_start);
     }
@@ -217,6 +225,14 @@ void Bus::store32(const std::uint32_t address, const std::uint32_t value) {
         write32(scratchpad_, physical - scratchpad_start, value);
         return;
     }
+    if (physical == gpu_data_address) {
+        gpu_.write_gp0(value);
+        return;
+    }
+    if (physical == gpu_status_address) {
+        gpu_.write_gp1(value);
+        return;
+    }
     if (physical >= io_start && physical < io_start + io_size - 3) {
         write32(io_, physical - io_start, value);
         return;
@@ -227,6 +243,14 @@ void Bus::store32(const std::uint32_t address, const std::uint32_t value) {
     }
 
     throw BusError{"unmapped 32-bit write at " + hexadecimal_address(address)};
+}
+
+const Gpu& Bus::gpu() const noexcept {
+    return gpu_;
+}
+
+Gpu& Bus::gpu() noexcept {
+    return gpu_;
 }
 
 std::uint32_t Bus::physical_address(const std::uint32_t address) noexcept {
