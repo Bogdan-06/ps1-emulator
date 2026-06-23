@@ -1,8 +1,11 @@
 #include "psx/bios.hpp"
 #include "psx/bus.hpp"
 #include "psx/cli.hpp"
+#include "psx/cpu.hpp"
 
+#include <cstdint>
 #include <exception>
+#include <iomanip>
 #include <iostream>
 #include <string_view>
 #include <vector>
@@ -30,12 +33,27 @@ int main(const int argc, const char* const argv[]) {
     }
 
     try {
-        [[maybe_unused]] psx::Bus bus{psx::Bios::load(parsed.config.bios_path)};
+        psx::Cpu cpu{psx::Bus{psx::Bios::load(parsed.config.bios_path)}};
 
         std::cout << "PS1 emulator core initialized\n"
                   << "BIOS: " << parsed.config.bios_path << '\n'
                   << "Instruction limit: " << parsed.config.instruction_limit << '\n'
                   << "Trace: " << (parsed.config.trace ? "enabled" : "disabled") << '\n';
+
+        std::uint64_t executed = 0;
+        for (; executed < parsed.config.instruction_limit; ++executed) {
+            const auto result = cpu.step();
+            if (parsed.config.trace) {
+                std::cout << std::hex << std::setfill('0')
+                          << std::setw(8) << result.pc << "  "
+                          << std::setw(8) << result.instruction << '\n';
+            }
+        }
+
+        std::cout << std::dec << "Stopped after " << executed
+                  << " instructions at PC 0x"
+                  << std::hex << std::setfill('0') << std::setw(8) << cpu.pc()
+                  << '\n';
     } catch (const std::exception& error) {
         std::cerr << "error: " << error.what() << '\n';
         return 1;

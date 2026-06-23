@@ -2,9 +2,10 @@
 
 An educational Sony PlayStation emulator written in modern C++.
 
-The project is at an early stage. The initial target is a testable interpreter
-for the MIPS R3000A CPU, followed by GPU, DMA, timers, controllers, audio, and
-CD-ROM support.
+The project is at an early stage. It currently has BIOS loading, the initial
+PlayStation memory map, and a testable interpreter for the core MIPS R3000A
+integer instruction set. GPU, DMA, timers, controllers, audio, CD-ROM support,
+and complete exception handling are still to come.
 
 ## Requirements
 
@@ -25,7 +26,8 @@ make test
 ## Run
 
 ```sh
-./build/ps1-emulator --bios path/to/scph1001.bin
+./build/ps1-emulator --bios path/to/scph1001.bin --steps 100000
 ```
 
-Use `--help` to list the available command-line options.
+Add `--trace` to print the PC and machine word for every instruction. Use
+`--help` to list all command-line options.
