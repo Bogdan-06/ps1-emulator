@@ -14,6 +14,8 @@ constexpr std::uint32_t expansion1_start = 0x1f00'0000;
 constexpr std::uint32_t expansion1_size = 8 * 1024 * 1024;
 constexpr std::uint32_t scratchpad_start = 0x1f80'0000;
 constexpr std::uint32_t io_start = 0x1f80'1000;
+constexpr std::uint32_t interrupt_status_address = 0x1f80'1070;
+constexpr std::uint32_t interrupt_mask_address = 0x1f80'1074;
 constexpr std::uint32_t dma_start = 0x1f80'1080;
 constexpr std::uint32_t dma_end = 0x1f80'10f8;
 constexpr std::uint32_t gpu_data_address = 0x1f80'1810;
@@ -102,6 +104,12 @@ std::uint16_t Bus::load16(const std::uint32_t address) const {
         && physical < scratchpad_start + scratchpad_size - 1) {
         return read16(scratchpad_, physical - scratchpad_start);
     }
+    if (physical == interrupt_status_address) {
+        return interrupt_status_;
+    }
+    if (physical == interrupt_mask_address) {
+        return interrupt_mask_;
+    }
     if (physical >= io_start && physical < io_start + io_size - 1) {
         return read16(io_, physical - io_start);
     }
@@ -130,6 +138,12 @@ std::uint32_t Bus::load32(const std::uint32_t address) const {
     if (physical >= scratchpad_start
         && physical < scratchpad_start + scratchpad_size - 3) {
         return read32(scratchpad_, physical - scratchpad_start);
+    }
+    if (physical == interrupt_status_address) {
+        return interrupt_status_;
+    }
+    if (physical == interrupt_mask_address) {
+        return interrupt_mask_;
     }
     if (physical == gpu_data_address) {
         return gpu_.read_data();
@@ -199,6 +213,14 @@ void Bus::store16(const std::uint32_t address, const std::uint16_t value) {
         write16(scratchpad_, physical - scratchpad_start, value);
         return;
     }
+    if (physical == interrupt_status_address) {
+        interrupt_status_ &= value;
+        return;
+    }
+    if (physical == interrupt_mask_address) {
+        interrupt_mask_ = static_cast<std::uint16_t>(value & 0x07ffU);
+        return;
+    }
     if (physical >= io_start && physical < io_start + io_size - 1) {
         write16(io_, physical - io_start, value);
         return;
@@ -230,6 +252,14 @@ void Bus::store32(const std::uint32_t address, const std::uint32_t value) {
         write32(scratchpad_, physical - scratchpad_start, value);
         return;
     }
+    if (physical == interrupt_status_address) {
+        interrupt_status_ &= static_cast<std::uint16_t>(value);
+        return;
+    }
+    if (physical == interrupt_mask_address) {
+        interrupt_mask_ = static_cast<std::uint16_t>(value & 0x07ffU);
+        return;
+    }
     if (physical == gpu_data_address) {
         gpu_.write_gp0(value);
         return;
@@ -254,12 +284,22 @@ void Bus::store32(const std::uint32_t address, const std::uint32_t value) {
     throw BusError{"unmapped 32-bit write at " + hexadecimal_address(address)};
 }
 
+void Bus::tick(const std::uint32_t cpu_cycles) {
+    if (gpu_.tick(cpu_cycles)) {
+        interrupt_status_ |= 1U << 0;
+    }
+}
+
 const Gpu& Bus::gpu() const noexcept {
     return gpu_;
 }
 
 Gpu& Bus::gpu() noexcept {
     return gpu_;
+}
+
+bool Bus::interrupt_pending() const noexcept {
+    return (interrupt_status_ & interrupt_mask_) != 0;
 }
 
 std::uint32_t Bus::load_dma(const std::uint32_t address) const {
@@ -429,6 +469,7 @@ void Bus::complete_dma(const std::size_t channel) {
     const auto flags = (dma_interrupt_ >> 24) & 0x7fU;
     if (master_enabled && (enabled & flags) != 0) {
         dma_interrupt_ |= 1U << 31;
+        interrupt_status_ |= 1U << 3;
     }
 }
 

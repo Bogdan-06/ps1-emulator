@@ -72,6 +72,21 @@ Cpu::Cpu(Bus bus)
 
 StepResult Cpu::step() {
     const auto instruction_pc = pc_;
+    bus_.tick(1);
+    if (bus_.interrupt_pending()) {
+        cop0_[13] |= 1U << 10;
+    } else {
+        cop0_[13] &= ~(1U << 10);
+    }
+
+    const bool interrupts_enabled = (cop0_[12] & 1U) != 0
+        && (cop0_[12] & cop0_[13] & 0x0000'ff00U) != 0;
+    if (interrupts_enabled && !next_instruction_in_delay_slot_) {
+        current_instruction_in_delay_slot_ = false;
+        enter_exception(0, instruction_pc);
+        return StepResult{instruction_pc, 0};
+    }
+
     const auto instruction = bus_.load32(instruction_pc);
 
     load_in_delay_slot_ = pending_load_;

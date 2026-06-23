@@ -18,11 +18,13 @@ public:
     static constexpr std::size_t vram_width = 1024;
     static constexpr std::size_t vram_height = 512;
     static constexpr std::size_t vram_size = vram_width * vram_height;
+    static constexpr std::uint32_t cpu_cycles_per_frame = 564'480;
 
     Gpu();
 
     void write_gp0(std::uint32_t value);
     void write_gp1(std::uint32_t value);
+    [[nodiscard]] bool tick(std::uint32_t cpu_cycles) noexcept;
     [[nodiscard]] std::uint32_t read_data();
     [[nodiscard]] std::uint32_t read_status() const noexcept;
 
@@ -111,6 +113,7 @@ private:
     std::uint16_t vertical_end_ = 0x100;
     bool force_mask_bit_ = false;
     bool preserve_masked_pixels_ = false;
+    std::uint32_t frame_cycles_ = 0;
 };
 
 }  // namespace psx

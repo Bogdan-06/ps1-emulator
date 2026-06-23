@@ -20,6 +20,14 @@ void run_gpu_tests() {
 
     expect((gpu.read_status() & (1U << 23)) != 0, "GPU display should start disabled");
     expect((gpu.read_status() & (1U << 26)) != 0, "GPU should start ready for commands");
+    const auto initial_field = gpu.read_status() >> 31;
+    expect(
+        !gpu.tick(psx::Gpu::cpu_cycles_per_frame - 1),
+        "GPU should not signal VBlank before a full frame");
+    expect(gpu.tick(1), "GPU should signal VBlank at the frame boundary");
+    expect(
+        gpu.read_status() >> 31 != initial_field,
+        "GPU field status should toggle at the frame boundary");
 
     gpu.write_gp0(0x0200'00ff);
     gpu.write_gp0(position(16, 20));

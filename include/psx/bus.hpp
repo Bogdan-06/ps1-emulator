@@ -30,9 +30,11 @@ public:
     void store8(std::uint32_t address, std::uint8_t value);
     void store16(std::uint32_t address, std::uint16_t value);
     void store32(std::uint32_t address, std::uint32_t value);
+    void tick(std::uint32_t cpu_cycles);
 
     [[nodiscard]] const Gpu& gpu() const noexcept;
     [[nodiscard]] Gpu& gpu() noexcept;
+    [[nodiscard]] bool interrupt_pending() const noexcept;
 
 private:
     struct DmaChannel {
@@ -60,6 +62,8 @@ private:
     std::array<DmaChannel, 7> dma_channels_{};
     std::uint32_t dma_control_ = 0x0765'4321;
     std::uint32_t dma_interrupt_ = 0;
+    std::uint16_t interrupt_status_ = 0;
+    std::uint16_t interrupt_mask_ = 0;
     std::uint32_t cache_control_ = 0;
 };
 

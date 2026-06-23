@@ -119,6 +119,17 @@ void Gpu::write_gp1(const std::uint32_t value) {
     }
 }
 
+bool Gpu::tick(const std::uint32_t cpu_cycles) noexcept {
+    frame_cycles_ += cpu_cycles;
+    bool vblank = false;
+    while (frame_cycles_ >= cpu_cycles_per_frame) {
+        frame_cycles_ -= cpu_cycles_per_frame;
+        status_ ^= 1U << 31;
+        vblank = true;
+    }
+    return vblank;
+}
+
 std::uint32_t Gpu::read_data() {
     if (transfer_mode_ == TransferMode::vram_to_cpu) {
         return read_transfer_word();
@@ -184,6 +195,7 @@ void Gpu::reset() {
     vertical_end_ = 0x100;
     force_mask_bit_ = false;
     preserve_masked_pixels_ = false;
+    frame_cycles_ = 0;
 }
 
 void Gpu::reset_command_buffer() noexcept {

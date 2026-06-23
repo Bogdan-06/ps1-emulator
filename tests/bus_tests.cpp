@@ -65,6 +65,13 @@ void run_bus_tests() {
         (bus.load32(0x1f80'10a8) & (1U << 24)) == 0,
         "GPU DMA completion should clear the start bit");
 
+    bus.store16(0x1f80'1074, 1);
+    bus.tick(psx::Gpu::cpu_cycles_per_frame);
+    expect((bus.load16(0x1f80'1070) & 1U) != 0, "VBlank should set interrupt status");
+    expect(bus.interrupt_pending(), "enabled VBlank should request a CPU interrupt");
+    bus.store16(0x1f80'1070, 0);
+    expect(!bus.interrupt_pending(), "interrupt acknowledgement should clear the request");
+
     bool rejected_unaligned = false;
     try {
         static_cast<void>(bus.load32(0x0000'0002));

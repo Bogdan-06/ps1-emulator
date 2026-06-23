@@ -201,4 +201,28 @@ void run_cpu_tests() {
             (cpu.cop0_register_value(13) & 0x8000'0000U) != 0,
             "delay-slot exception should set the Cause BD bit");
     }
+
+    {
+        std::vector<std::uint8_t> bios(psx::Bios::size);
+        write_instruction(bios, 0, encode_i(0x0f, 0, 8, 0x0040));  // lui t0, 0x0040
+        write_instruction(bios, 1, encode_i(0x0d, 8, 8, 0x0401));  // ori t0, t0, 0x0401
+        write_instruction(bios, 2, encode_i(0x10, 4, 8, 12 << 11));// mtc0 t0, status
+        write_instruction(bios, 3, 0);
+        write_instruction(bios, 0x180 / 4, 0);
+
+        psx::Cpu cpu{psx::Bus{psx::Bios{std::move(bios)}}};
+        for (int step = 0; step < 4; ++step) {
+            static_cast<void>(cpu.step());
+        }
+        cpu.bus().store16(0x1f80'1074, 1);
+        cpu.bus().tick(psx::Gpu::cpu_cycles_per_frame);
+        static_cast<void>(cpu.step());
+
+        expect(
+            cpu.pc() == 0xbfc0'0180,
+            "enabled hardware interrupt should enter the exception vector");
+        expect(
+            ((cpu.cop0_register_value(13) >> 2) & 0x1fU) == 0,
+            "hardware interrupt should set exception code zero");
+    }
 }
