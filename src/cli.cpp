@@ -23,6 +23,7 @@ namespace {
 
 ParseResult parse_arguments(const std::span<const std::string_view> arguments) {
     ParseResult result;
+    bool steps_provided = false;
 
     for (std::size_t index = 0; index < arguments.size(); ++index) {
         const auto argument = arguments[index];
@@ -37,6 +38,11 @@ ParseResult parse_arguments(const std::span<const std::string_view> arguments) {
             continue;
         }
 
+        if (argument == "--display") {
+            result.config.display = true;
+            continue;
+        }
+
         if (argument == "--bios") {
             if (++index >= arguments.size()) {
                 result.error = "--bios requires a file path";
@@ -47,6 +53,7 @@ ParseResult parse_arguments(const std::span<const std::string_view> arguments) {
         }
 
         if (argument == "--steps") {
+            steps_provided = true;
             if (++index >= arguments.size()) {
                 result.error = "--steps requires an integer";
                 return result;
@@ -66,18 +73,22 @@ ParseResult parse_arguments(const std::span<const std::string_view> arguments) {
     if (!result.config.show_help && result.config.bios_path.empty()) {
         result.error = "a BIOS path is required; pass --bios <file>";
     }
+    if (result.config.display && !steps_provided) {
+        result.config.instruction_limit = 0;
+    }
 
     return result;
 }
 
 std::string usage(const std::string_view program_name) {
     return "Usage: " + std::string{program_name}
-        + " --bios <file> [--steps <count>] [--trace]\n"
+        + " --bios <file> [--steps <count>] [--trace] [--display]\n"
           "\n"
           "Options:\n"
           "  --bios <file>    Path to a 512 KiB PlayStation BIOS dump\n"
-          "  --steps <count>  Stop after this many CPU instructions (default: 1000000)\n"
+          "  --steps <count>  Stop after this many instructions; 0 runs continuously\n"
           "  --trace          Print each executed instruction\n"
+          "  --display        Open a window; runs continuously unless --steps is set\n"
           "  -h, --help       Show this help text\n";
 }
 

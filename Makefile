@@ -3,14 +3,15 @@ CXX ?= g++
 CPPFLAGS := -Iinclude
 CXXFLAGS := -std=c++20 -Wall -Wextra -Wpedantic -Wconversion -Wshadow -O2
 DEPFLAGS := -MMD -MP
+LDLIBS := -ldl
 
 BUILD_DIR := build
 APP := $(BUILD_DIR)/ps1-emulator
 TEST_APP := $(BUILD_DIR)/ps1-emulator-tests
 
-CORE_SOURCES := src/bios.cpp src/bus.cpp src/cli.cpp src/cpu.cpp src/gpu.cpp
+CORE_SOURCES := src/bios.cpp src/bus.cpp src/cli.cpp src/cpu.cpp src/display.cpp src/gpu.cpp
 APP_SOURCES := src/main.cpp $(CORE_SOURCES)
-TEST_SOURCES := tests/test_main.cpp tests/cli_tests.cpp tests/bus_tests.cpp tests/cpu_tests.cpp tests/gpu_tests.cpp $(CORE_SOURCES)
+TEST_SOURCES := tests/test_main.cpp tests/cli_tests.cpp tests/bus_tests.cpp tests/cpu_tests.cpp tests/display_tests.cpp tests/gpu_tests.cpp $(CORE_SOURCES)
 
 APP_OBJECTS := $(APP_SOURCES:%.cpp=$(BUILD_DIR)/%.o)
 TEST_OBJECTS := $(TEST_SOURCES:%.cpp=$(BUILD_DIR)/%.o)
@@ -24,10 +25,10 @@ test: $(TEST_APP)
 	./$(TEST_APP)
 
 $(APP): $(APP_OBJECTS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDLIBS) -o $@
 
 $(TEST_APP): $(TEST_OBJECTS)
-	$(CXX) $(CXXFLAGS) $^ -o $@
+	$(CXX) $(CXXFLAGS) $^ $(LDLIBS) -o $@
 
 $(BUILD_DIR)/%.o: %.cpp
 	@mkdir -p $(@D)

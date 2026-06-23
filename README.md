@@ -31,3 +31,12 @@ make test
 
 Add `--trace` to print the PC and machine word for every instruction. Use
 `--help` to list all command-line options.
+
+To open the experimental GPU display and run until the window closes:
+
+```sh
+./build/ps1-emulator --bios path/to/scph1001.bin --display
+```
+
+The display backend loads the SDL2 runtime dynamically. On Linux, install the
+SDL2 runtime package if the program reports that `libSDL2-2.0.so.0` is missing.

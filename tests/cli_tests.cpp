@@ -26,6 +26,15 @@ void run_cli_tests() {
     }
 
     {
+        const std::vector<std::string_view> arguments{"--bios", "bios.bin", "--display"};
+        const auto result = psx::parse_arguments(arguments);
+
+        expect(result.ok(), "display arguments should parse");
+        expect(result.config.display, "display flag should be enabled");
+        expect(result.config.instruction_limit == 0, "display should run continuously by default");
+    }
+
+    {
         const std::vector<std::string_view> arguments;
         const auto result = psx::parse_arguments(arguments);
 

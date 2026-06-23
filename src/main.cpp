@@ -2,11 +2,13 @@
 #include "psx/bus.hpp"
 #include "psx/cli.hpp"
 #include "psx/cpu.hpp"
+#include "psx/display.hpp"
 
 #include <cstdint>
 #include <exception>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -34,19 +36,36 @@ int main(const int argc, const char* const argv[]) {
 
     try {
         psx::Cpu cpu{psx::Bus{psx::Bios::load(parsed.config.bios_path)}};
+        std::unique_ptr<psx::Display> display;
+        if (parsed.config.display) {
+            display = std::make_unique<psx::Display>();
+        }
 
         std::cout << "PS1 emulator core initialized\n"
                   << "BIOS: " << parsed.config.bios_path << '\n'
-                  << "Instruction limit: " << parsed.config.instruction_limit << '\n'
+                  << "Instruction limit: ";
+        if (parsed.config.instruction_limit == 0) {
+            std::cout << "unlimited\n";
+        } else {
+            std::cout << parsed.config.instruction_limit << '\n';
+        }
+        std::cout
                   << "Trace: " << (parsed.config.trace ? "enabled" : "disabled") << '\n';
 
         std::uint64_t executed = 0;
-        for (; executed < parsed.config.instruction_limit; ++executed) {
+        bool running = true;
+        while (running
+            && (parsed.config.instruction_limit == 0
+                || executed < parsed.config.instruction_limit)) {
             const auto result = cpu.step();
+            ++executed;
             if (parsed.config.trace) {
                 std::cout << std::hex << std::setfill('0')
                           << std::setw(8) << result.pc << "  "
                           << std::setw(8) << result.instruction << '\n';
+            }
+            if (display != nullptr && executed % 50'000 == 0) {
+                running = display->present(cpu.bus().gpu());
             }
         }
 
