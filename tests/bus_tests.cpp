@@ -72,6 +72,16 @@ void run_bus_tests() {
     bus.store16(0x1f80'1070, 0);
     expect(!bus.interrupt_pending(), "interrupt acknowledgement should clear the request");
 
+    bus.store16(0x1f80'1074, 1U << 4);
+    bus.store16(0x1f80'1108, 3);
+    bus.store16(0x1f80'1104, (1U << 3) | (1U << 4));
+    bus.tick(3);
+    expect(bus.load16(0x1f80'1100) == 0, "timer should reset at its target");
+    expect(
+        (bus.load16(0x1f80'1070) & (1U << 4)) != 0,
+        "timer target should set its interrupt status bit");
+    expect(bus.interrupt_pending(), "enabled timer interrupt should reach the CPU");
+
     bool rejected_unaligned = false;
     try {
         static_cast<void>(bus.load32(0x0000'0002));

@@ -18,6 +18,8 @@ constexpr std::uint32_t interrupt_status_address = 0x1f80'1070;
 constexpr std::uint32_t interrupt_mask_address = 0x1f80'1074;
 constexpr std::uint32_t dma_start = 0x1f80'1080;
 constexpr std::uint32_t dma_end = 0x1f80'10f8;
+constexpr std::uint32_t timer_start = 0x1f80'1100;
+constexpr std::uint32_t timer_end = 0x1f80'1130;
 constexpr std::uint32_t gpu_data_address = 0x1f80'1810;
 constexpr std::uint32_t gpu_status_address = 0x1f80'1814;
 constexpr std::uint32_t cdrom_start = 0x1f80'1800;
@@ -116,6 +118,9 @@ std::uint16_t Bus::load16(const std::uint32_t address) const {
     if (physical == interrupt_mask_address) {
         return interrupt_mask_;
     }
+    if (physical >= timer_start && physical < timer_end) {
+        return load_timer(physical);
+    }
     if (physical >= io_start && physical < io_start + io_size - 1) {
         return read16(io_, physical - io_start);
     }
@@ -150,6 +155,9 @@ std::uint32_t Bus::load32(const std::uint32_t address) const {
     }
     if (physical == interrupt_mask_address) {
         return interrupt_mask_;
+    }
+    if (physical >= timer_start && physical < timer_end) {
+        return load_timer(physical);
     }
     if (physical == gpu_data_address) {
         return gpu_.read_data();
@@ -231,6 +239,10 @@ void Bus::store16(const std::uint32_t address, const std::uint16_t value) {
         interrupt_mask_ = static_cast<std::uint16_t>(value & 0x07ffU);
         return;
     }
+    if (physical >= timer_start && physical < timer_end) {
+        store_timer(physical, value);
+        return;
+    }
     if (physical >= io_start && physical < io_start + io_size - 1) {
         write16(io_, physical - io_start, value);
         return;
@@ -270,6 +282,10 @@ void Bus::store32(const std::uint32_t address, const std::uint32_t value) {
         interrupt_mask_ = static_cast<std::uint16_t>(value & 0x07ffU);
         return;
     }
+    if (physical >= timer_start && physical < timer_end) {
+        store_timer(physical, static_cast<std::uint16_t>(value));
+        return;
+    }
     if (physical == gpu_data_address) {
         gpu_.write_gp0(value);
         return;
@@ -300,6 +316,26 @@ void Bus::tick(const std::uint32_t cpu_cycles) {
     }
     if (cdrom_.interrupt_requested()) {
         interrupt_status_ |= 1U << 2;
+    }
+
+    tick_timer(0, cpu_cycles);
+
+    auto& timer1 = timers_[1];
+    timer1.divider_cycles += cpu_cycles;
+    if (timer1.divider_cycles >= 2'146) {
+        const auto ticks = timer1.divider_cycles / 2'146;
+        timer1.divider_cycles %= 2'146;
+        tick_timer(1, ticks);
+    }
+
+    auto& timer2 = timers_[2];
+    if ((timer2.mode & (1U << 9)) != 0) {
+        timer2.divider_cycles += cpu_cycles;
+        const auto ticks = timer2.divider_cycles / 8;
+        timer2.divider_cycles %= 8;
+        tick_timer(2, ticks);
+    } else {
+        tick_timer(2, cpu_cycles);
     }
 }
 
@@ -499,6 +535,80 @@ void Bus::complete_dma(const std::size_t channel) {
     if (master_enabled && (enabled & flags) != 0) {
         dma_interrupt_ |= 1U << 31;
         interrupt_status_ |= 1U << 3;
+    }
+}
+
+std::uint16_t Bus::load_timer(const std::uint32_t address) const {
+    const auto timer_index = static_cast<std::size_t>((address - timer_start) >> 4);
+    if (timer_index >= timers_.size()) {
+        return 0;
+    }
+
+    const auto register_index = (address >> 2) & 3U;
+    auto& timer = timers_[timer_index];
+    switch (register_index) {
+    case 0:
+        return static_cast<std::uint16_t>(timer.counter);
+    case 1: {
+        const auto value = timer.mode;
+        timer.mode &= static_cast<std::uint16_t>(~0x1800U);
+        return value;
+    }
+    case 2:
+        return timer.target;
+    default:
+        return 0;
+    }
+}
+
+void Bus::store_timer(const std::uint32_t address, const std::uint16_t value) {
+    const auto timer_index = static_cast<std::size_t>((address - timer_start) >> 4);
+    if (timer_index >= timers_.size()) {
+        return;
+    }
+
+    auto& timer = timers_[timer_index];
+    switch ((address >> 2) & 3U) {
+    case 0:
+        timer.counter = value;
+        return;
+    case 1:
+        timer.mode = static_cast<std::uint16_t>(value & 0x03ffU);
+        timer.counter = 0;
+        timer.divider_cycles = 0;
+        return;
+    case 2:
+        timer.target = value;
+        return;
+    default:
+        return;
+    }
+}
+
+void Bus::tick_timer(const std::size_t timer_index, const std::uint32_t ticks) {
+    if (ticks == 0) {
+        return;
+    }
+
+    auto& timer = timers_[timer_index];
+    for (std::uint32_t tick = 0; tick < ticks; ++tick) {
+        ++timer.counter;
+        bool interrupt = false;
+        if (static_cast<std::uint16_t>(timer.counter) == timer.target) {
+            timer.mode |= 1U << 11;
+            interrupt = (timer.mode & (1U << 4)) != 0;
+            if ((timer.mode & (1U << 3)) != 0) {
+                timer.counter = 0;
+            }
+        }
+        if (timer.counter > 0xffffU) {
+            timer.counter &= 0xffffU;
+            timer.mode |= 1U << 12;
+            interrupt = interrupt || (timer.mode & (1U << 5)) != 0;
+        }
+        if (interrupt) {
+            interrupt_status_ |= static_cast<std::uint16_t>(1U << (4 + timer_index));
+        }
     }
 }
 

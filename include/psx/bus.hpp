@@ -46,6 +46,13 @@ private:
         std::uint32_t control = 0;
     };
 
+    struct Timer {
+        std::uint32_t counter = 0;
+        std::uint16_t mode = 0;
+        std::uint16_t target = 0xffff;
+        std::uint32_t divider_cycles = 0;
+    };
+
     [[nodiscard]] static std::uint32_t physical_address(std::uint32_t address) noexcept;
     static void require_alignment(std::uint32_t address, std::uint32_t alignment);
     [[nodiscard]] std::uint32_t load_dma(std::uint32_t address) const;
@@ -54,6 +61,9 @@ private:
     void execute_gpu_dma(DmaChannel& channel);
     void execute_otc_dma(DmaChannel& channel);
     void complete_dma(std::size_t channel);
+    [[nodiscard]] std::uint16_t load_timer(std::uint32_t address) const;
+    void store_timer(std::uint32_t address, std::uint16_t value);
+    void tick_timer(std::size_t timer_index, std::uint32_t ticks);
     [[nodiscard]] std::uint32_t read_ram_word(std::uint32_t address) const;
     void write_ram_word(std::uint32_t address, std::uint32_t value);
 
@@ -68,6 +78,7 @@ private:
     std::uint32_t dma_interrupt_ = 0;
     std::uint16_t interrupt_status_ = 0;
     std::uint16_t interrupt_mask_ = 0;
+    mutable std::array<Timer, 3> timers_{};
     std::uint32_t cache_control_ = 0;
 };
 
