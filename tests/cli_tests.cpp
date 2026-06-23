@@ -1,22 +1,11 @@
 #include "psx/cli.hpp"
 
-#include <cstdlib>
-#include <iostream>
 #include <string_view>
 #include <vector>
 
-namespace {
+void expect(bool condition, std::string_view message);
 
-void expect(const bool condition, const std::string_view message) {
-    if (!condition) {
-        std::cerr << "FAILED: " << message << '\n';
-        std::exit(1);
-    }
-}
-
-}  // namespace
-
-int main() {
+void run_cli_tests() {
     {
         const std::vector<std::string_view> arguments{
             "--bios", "bios.bin", "--steps", "42", "--trace"};
@@ -50,6 +39,4 @@ int main() {
         expect(!result.ok(), "invalid instruction limit should fail");
     }
 
-    std::cout << "CLI tests passed\n";
-    return 0;
 }

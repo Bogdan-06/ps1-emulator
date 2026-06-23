@@ -1,5 +1,8 @@
+#include "psx/bios.hpp"
+#include "psx/bus.hpp"
 #include "psx/cli.hpp"
 
+#include <exception>
 #include <iostream>
 #include <string_view>
 #include <vector>
@@ -26,10 +29,17 @@ int main(const int argc, const char* const argv[]) {
         return 0;
     }
 
-    std::cout << "PS1 emulator core initialized\n"
-              << "BIOS: " << parsed.config.bios_path << '\n'
-              << "Instruction limit: " << parsed.config.instruction_limit << '\n'
-              << "Trace: " << (parsed.config.trace ? "enabled" : "disabled") << '\n';
+    try {
+        [[maybe_unused]] psx::Bus bus{psx::Bios::load(parsed.config.bios_path)};
+
+        std::cout << "PS1 emulator core initialized\n"
+                  << "BIOS: " << parsed.config.bios_path << '\n'
+                  << "Instruction limit: " << parsed.config.instruction_limit << '\n'
+                  << "Trace: " << (parsed.config.trace ? "enabled" : "disabled") << '\n';
+    } catch (const std::exception& error) {
+        std::cerr << "error: " << error.what() << '\n';
+        return 1;
+    }
 
     return 0;
 }
