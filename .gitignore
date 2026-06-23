@@ -1,0 +1,10 @@
+/build/
+*.d
+*.o
+
+# User-provided copyrighted dumps must never be committed.
+*.bin
+*.cue
+*.chd
+*.iso
+*.rom
