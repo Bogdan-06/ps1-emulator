@@ -9,6 +9,7 @@ void run_cpu_tests();
 void run_disc_tests();
 void run_display_tests();
 void run_gpu_tests();
+void run_launcher_settings_tests();
 
 void expect(const bool condition, const std::string_view message) {
     if (!condition) {
@@ -25,6 +26,7 @@ int main() {
     run_disc_tests();
     run_display_tests();
     run_gpu_tests();
+    run_launcher_settings_tests();
     std::cout << "All tests passed\n";
     return 0;
 }

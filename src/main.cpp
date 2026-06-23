@@ -4,6 +4,7 @@
 #include "psx/cpu.hpp"
 #include "psx/display.hpp"
 #include "psx/disc.hpp"
+#include "psx/launcher.hpp"
 
 #include <cstdint>
 #include <exception>
@@ -22,57 +23,73 @@ int main(const int argc, const char* const argv[]) {
         arguments.emplace_back(argv[index]);
     }
 
-    const auto parsed = psx::parse_arguments(arguments);
     const std::string_view program_name = argc > 0 ? argv[0] : "ps1-emulator";
+    psx::AppConfig config;
 
-    if (!parsed.ok()) {
-        std::cerr << "error: " << parsed.error << "\n\n"
-                  << psx::usage(program_name);
-        return 2;
-    }
+    if (arguments.empty()) {
+        try {
+            const auto launched = psx::Launcher::run();
+            if (!launched.has_value()) {
+                return 0;
+            }
+            config = *launched;
+        } catch (const std::exception& error) {
+            std::cerr << "error: " << error.what() << '\n';
+            return 1;
+        }
+    } else {
+        const auto parsed = psx::parse_arguments(arguments);
 
-    if (parsed.config.show_help) {
-        std::cout << psx::usage(program_name);
-        return 0;
+        if (!parsed.ok()) {
+            std::cerr << "error: " << parsed.error << "\n\n"
+                      << psx::usage(program_name);
+            return 2;
+        }
+
+        if (parsed.config.show_help) {
+            std::cout << psx::usage(program_name);
+            return 0;
+        }
+        config = parsed.config;
     }
 
     try {
         std::optional<psx::Disc> disc;
-        if (!parsed.config.disc_path.empty()) {
-            disc.emplace(psx::Disc::open(parsed.config.disc_path));
+        if (!config.disc_path.empty()) {
+            disc.emplace(psx::Disc::open(config.disc_path));
         }
         psx::Cpu cpu{
-            psx::Bus{psx::Bios::load(parsed.config.bios_path), std::move(disc)}};
+            psx::Bus{psx::Bios::load(config.bios_path), std::move(disc)}};
         std::unique_ptr<psx::Display> display;
-        if (parsed.config.display) {
+        if (config.display) {
             display = std::make_unique<psx::Display>();
         }
 
         std::cout << "PS1 emulator core initialized\n"
-                  << "BIOS: " << parsed.config.bios_path << '\n'
+                  << "BIOS: " << config.bios_path << '\n'
                   << "Disc: "
-                  << (parsed.config.disc_path.empty()
+                  << (config.disc_path.empty()
                         ? std::string{"none"}
-                        : parsed.config.disc_path.string())
+                        : config.disc_path.string())
                   << '\n'
                   << "Instruction limit: ";
-        if (parsed.config.instruction_limit == 0) {
+        if (config.instruction_limit == 0) {
             std::cout << "unlimited\n";
         } else {
-            std::cout << parsed.config.instruction_limit << '\n';
+            std::cout << config.instruction_limit << '\n';
         }
         std::cout
-                  << "Trace: " << (parsed.config.trace ? "enabled" : "disabled") << '\n';
+                  << "Trace: " << (config.trace ? "enabled" : "disabled") << '\n';
 
         std::uint64_t executed = 0;
         std::uint64_t presented_frame = cpu.bus().gpu().frame_counter();
         bool running = true;
         while (running
-            && (parsed.config.instruction_limit == 0
-                || executed < parsed.config.instruction_limit)) {
+            && (config.instruction_limit == 0
+                || executed < config.instruction_limit)) {
             const auto result = cpu.step();
             ++executed;
-            if (parsed.config.trace) {
+            if (config.trace) {
                 std::cout << std::hex << std::setfill('0')
                           << std::setw(8) << result.pc << "  "
                           << std::setw(8) << result.instruction << '\n';

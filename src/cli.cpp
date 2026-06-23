@@ -91,6 +91,8 @@ ParseResult parse_arguments(const std::span<const std::string_view> arguments) {
 
 std::string usage(const std::string_view program_name) {
     return "Usage: " + std::string{program_name}
+        + "                         Open the graphical launcher\n"
+          "       " + std::string{program_name}
         + " --bios <file> [--disc <file>] [--steps <count>] [--trace] [--display]\n"
           "\n"
           "Options:\n"

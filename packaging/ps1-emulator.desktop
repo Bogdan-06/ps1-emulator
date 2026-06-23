@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PS1 Emulator
+Comment=Launch the PlayStation emulator
+Exec=/var/home/Moth/Desktop/Projects/ps1-emulator/build/ps1-emulator
+Path=/var/home/Moth/Desktop/Projects/ps1-emulator
+Icon=applications-games
+Terminal=false
+Categories=Game;Emulator;
+StartupNotify=true

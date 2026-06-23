@@ -25,6 +25,15 @@ make test
 
 ## Run
 
+Open the graphical launcher:
+
+```sh
+./build/ps1-emulator
+```
+
+The launcher remembers the selected BIOS and disc and provides Game, Settings,
+and About pages. Command-line mode remains available for debugging:
+
 ```sh
 ./build/ps1-emulator --bios path/to/scph1001.bin --steps 100000
 ```
