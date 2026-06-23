@@ -164,4 +164,41 @@ void run_cpu_tests() {
         expect(cpu.bus().load8(0x107) == 0x33, "SWR should store the third byte");
         expect(cpu.bus().load8(0x108) == 0x44, "SWL should store the high byte");
     }
+
+    {
+        std::vector<std::uint8_t> bios(psx::Bios::size);
+        write_instruction(bios, 0, 0x0000'000c);                   // syscall
+        write_instruction(bios, 0x180 / 4, 0);                     // exception handler
+
+        psx::Cpu cpu{psx::Bus{psx::Bios{std::move(bios)}}};
+        static_cast<void>(cpu.step());
+
+        expect(
+            cpu.pc() == 0xbfc0'0180,
+            "SYSCALL should enter the bootstrap exception vector");
+        expect(
+            cpu.cop0_register_value(14) == psx::Cpu::reset_vector,
+            "SYSCALL should store its address in EPC");
+        expect(
+            ((cpu.cop0_register_value(13) >> 2) & 0x1fU) == 8,
+            "SYSCALL should set the exception code");
+    }
+
+    {
+        std::vector<std::uint8_t> bios(psx::Bios::size);
+        write_instruction(bios, 0, encode_i(0x04, 0, 0, 1));       // beq zero, zero, +1
+        write_instruction(bios, 1, 0x0000'000c);                   // syscall in delay slot
+        write_instruction(bios, 0x180 / 4, 0);
+
+        psx::Cpu cpu{psx::Bus{psx::Bios{std::move(bios)}}};
+        static_cast<void>(cpu.step());
+        static_cast<void>(cpu.step());
+
+        expect(
+            cpu.cop0_register_value(14) == psx::Cpu::reset_vector,
+            "delay-slot exception EPC should point to the branch");
+        expect(
+            (cpu.cop0_register_value(13) & 0x8000'0000U) != 0,
+            "delay-slot exception should set the Cause BD bit");
+    }
 }

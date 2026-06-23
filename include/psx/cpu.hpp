@@ -29,6 +29,7 @@ public:
 
     [[nodiscard]] std::uint32_t pc() const noexcept;
     [[nodiscard]] std::uint32_t register_value(std::size_t index) const;
+    [[nodiscard]] std::uint32_t cop0_register_value(std::size_t index) const;
     [[nodiscard]] std::uint32_t hi() const noexcept;
     [[nodiscard]] std::uint32_t lo() const noexcept;
     [[nodiscard]] const Bus& bus() const noexcept;
@@ -46,6 +47,8 @@ private:
     void execute_cop0(std::uint32_t instruction, std::uint32_t instruction_pc);
 
     void branch(std::uint16_t immediate);
+    void enter_exception(std::uint32_t code, std::uint32_t instruction_pc);
+    void mark_delay_slot() noexcept;
     void set_register(std::uint32_t index, std::uint32_t value) noexcept;
     void schedule_load(std::uint32_t index, std::uint32_t value) noexcept;
     [[nodiscard]] std::uint32_t load_register(std::uint32_t index) const noexcept;
@@ -53,11 +56,11 @@ private:
     [[nodiscard]] std::uint32_t effective_address(std::uint32_t instruction) const noexcept;
     [[nodiscard]] bool cache_isolated() const noexcept;
 
-    [[noreturn]] static void unsupported(
+    void unsupported(
         std::uint32_t instruction,
         std::uint32_t instruction_pc,
         const char* category);
-    [[noreturn]] static void arithmetic_overflow(std::uint32_t instruction_pc);
+    void arithmetic_overflow(std::uint32_t instruction_pc);
 
     Bus bus_;
     std::array<std::uint32_t, 32> registers_{};
@@ -69,6 +72,8 @@ private:
     std::optional<PendingLoad> pending_load_;
     std::optional<PendingLoad> load_in_delay_slot_;
     std::optional<std::uint32_t> written_register_;
+    bool current_instruction_in_delay_slot_ = false;
+    bool next_instruction_in_delay_slot_ = false;
 };
 
 }  // namespace psx

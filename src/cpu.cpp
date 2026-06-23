@@ -2,10 +2,7 @@
 
 #include <bit>
 #include <cstdint>
-#include <iomanip>
 #include <limits>
-#include <sstream>
-#include <string>
 #include <utility>
 
 namespace psx {
@@ -64,12 +61,6 @@ namespace {
     return std::bit_cast<std::uint32_t>(value);
 }
 
-[[nodiscard]] std::string hexadecimal(const std::uint32_t value) {
-    std::ostringstream stream;
-    stream << "0x" << std::hex << std::setfill('0') << std::setw(8) << value;
-    return stream.str();
-}
-
 }  // namespace
 
 Cpu::Cpu(Bus bus)
@@ -86,6 +77,8 @@ StepResult Cpu::step() {
     load_in_delay_slot_ = pending_load_;
     pending_load_.reset();
     written_register_.reset();
+    current_instruction_in_delay_slot_ = next_instruction_in_delay_slot_;
+    next_instruction_in_delay_slot_ = false;
     pc_ = next_pc_;
     next_pc_ += 4;
 
@@ -111,6 +104,13 @@ std::uint32_t Cpu::register_value(const std::size_t index) const {
         throw std::out_of_range{"CPU register index out of range"};
     }
     return registers_[index];
+}
+
+std::uint32_t Cpu::cop0_register_value(const std::size_t index) const {
+    if (index >= cop0_.size()) {
+        throw std::out_of_range{"COP0 register index out of range"};
+    }
+    return cop0_[index];
 }
 
 std::uint32_t Cpu::hi() const noexcept {
@@ -142,28 +142,34 @@ void Cpu::execute(const std::uint32_t instruction, const std::uint32_t instructi
         execute_regimm(instruction, instruction_pc);
         return;
     case 0x02:
+        mark_delay_slot();
         next_pc_ = (pc_ & 0xf000'0000U) | ((instruction & 0x03ff'ffffU) << 2);
         return;
     case 0x03:
+        mark_delay_slot();
         set_register(31, next_pc_);
         next_pc_ = (pc_ & 0xf000'0000U) | ((instruction & 0x03ff'ffffU) << 2);
         return;
     case 0x04:
+        mark_delay_slot();
         if (source == target) {
             branch(immediate(instruction));
         }
         return;
     case 0x05:
+        mark_delay_slot();
         if (source != target) {
             branch(immediate(instruction));
         }
         return;
     case 0x06:
+        mark_delay_slot();
         if (signed_source <= 0) {
             branch(immediate(instruction));
         }
         return;
     case 0x07:
+        mark_delay_slot();
         if (signed_source > 0) {
             branch(immediate(instruction));
         }
@@ -174,6 +180,7 @@ void Cpu::execute(const std::uint32_t instruction, const std::uint32_t instructi
         if (result < std::numeric_limits<std::int32_t>::min()
             || result > std::numeric_limits<std::int32_t>::max()) {
             arithmetic_overflow(instruction_pc);
+            return;
         }
         set_register(rt(instruction), as_unsigned(static_cast<std::int32_t>(result)));
         return;
@@ -379,11 +386,19 @@ void Cpu::execute_special(
         set_register(rd(instruction), as_unsigned(signed_target >> (source & 0x1f)));
         return;
     case 0x08:
+        mark_delay_slot();
         next_pc_ = source;
         return;
     case 0x09:
+        mark_delay_slot();
         set_register(rd(instruction), next_pc_);
         next_pc_ = source;
+        return;
+    case 0x0c:
+        enter_exception(8, instruction_pc);
+        return;
+    case 0x0d:
+        enter_exception(9, instruction_pc);
         return;
     case 0x10:
         set_register(rd(instruction), hi_);
@@ -444,6 +459,7 @@ void Cpu::execute_special(
         if (result < std::numeric_limits<std::int32_t>::min()
             || result > std::numeric_limits<std::int32_t>::max()) {
             arithmetic_overflow(instruction_pc);
+            return;
         }
         set_register(rd(instruction), as_unsigned(static_cast<std::int32_t>(result)));
         return;
@@ -496,8 +512,10 @@ void Cpu::execute_regimm(
         break;
     default:
         unsupported(instruction, instruction_pc, "REGIMM function");
+        return;
     }
 
+    mark_delay_slot();
     if (link) {
         set_register(31, next_pc_);
     }
@@ -537,6 +555,33 @@ void Cpu::branch(const std::uint16_t value) {
     next_pc_ = pc_ + offset;
 }
 
+void Cpu::enter_exception(
+    const std::uint32_t code,
+    const std::uint32_t instruction_pc) {
+    auto& status = cop0_[12];
+    auto& cause = cop0_[13];
+    auto& epc = cop0_[14];
+
+    cause = (cause & ~0x8000'007cU) | ((code & 0x1fU) << 2);
+    epc = instruction_pc;
+    if (current_instruction_in_delay_slot_) {
+        cause |= 0x8000'0000U;
+        epc -= 4;
+    }
+
+    status = (status & ~0x3fU) | ((status << 2) & 0x3fU);
+    const auto vector = (status & (1U << 22)) != 0
+        ? 0xbfc0'0180U
+        : 0x8000'0080U;
+    pc_ = vector;
+    next_pc_ = vector + 4;
+    next_instruction_in_delay_slot_ = false;
+}
+
+void Cpu::mark_delay_slot() noexcept {
+    next_instruction_in_delay_slot_ = true;
+}
+
 void Cpu::set_register(const std::uint32_t index, const std::uint32_t value) noexcept {
     if (index == 0) {
         return;
@@ -574,14 +619,13 @@ void Cpu::unsupported(
     const std::uint32_t instruction,
     const std::uint32_t instruction_pc,
     const char* const category) {
-    throw CpuError{
-        "unsupported " + std::string{category}
-        + " " + hexadecimal(instruction)
-        + " at PC " + hexadecimal(instruction_pc)};
+    static_cast<void>(instruction);
+    static_cast<void>(category);
+    enter_exception(10, instruction_pc);
 }
 
 void Cpu::arithmetic_overflow(const std::uint32_t instruction_pc) {
-    throw CpuError{"arithmetic overflow at PC " + hexadecimal(instruction_pc)};
+    enter_exception(12, instruction_pc);
 }
 
 }  // namespace psx
